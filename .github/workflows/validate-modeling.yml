@@ -1,0 +1,42 @@
+name: Validate NBA modeling notebook
+on:
+  push:
+    paths:
+      - 'notebooks/04_modeling_evaluation.ipynb'
+      - 'data/processed/games_processed.csv'
+      - 'requirements.txt'
+      - '.github/workflows/validate-modeling.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  execute-modeling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - run: pip install -r requirements.txt nbconvert ipykernel
+      - name: Execute notebook against repository data
+        working-directory: notebooks
+        run: jupyter nbconvert --to notebook --execute 04_modeling_evaluation.ipynb --output 04_modeling_evaluation.executed.ipynb --ExecutePreprocessor.timeout=2400
+      - name: Commit validated model outputs
+        if: success()
+        run: |
+          mv notebooks/04_modeling_evaluation.executed.ipynb notebooks/04_modeling_evaluation.ipynb
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add notebooks/04_modeling_evaluation.ipynb reports/model_comparison.csv reports/figures/final_model_confusion_matrix.png
+          git diff --cached --quiet || (git commit -m "Save validated modeling results and comparison figures" && git push)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nba-modeling-validation
+          path: |
+            notebooks/04_modeling_evaluation.executed.ipynb
+            reports/model_comparison.csv
+            reports/figures/final_model_confusion_matrix.png
+          if-no-files-found: warn
